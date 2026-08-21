@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# ML models
+backend/ml/model/*
+!backend/ml/model/.gitkeep
+
+# Generated datasets
+backend/data/
+*.csv
+*.parquet
+
+# Logs
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
