@@ -157,6 +157,8 @@ class PolicyDecision(str, Enum):
 
     REQUIRES_APPROVAL = "requires_approval"
 
+    DEFERRED = "deferred"
+
 
 class AuditActor(str, Enum):
     SYSTEM = "system"

@@ -58,6 +58,11 @@ class RecoveryCase(BaseModel):
         ge=0
     )
 
+    recovery_retry_count: int = Field(
+        default=0,
+        ge=0
+    )
+
     previous_contacts: int = Field(
         default=0,
         ge=0
