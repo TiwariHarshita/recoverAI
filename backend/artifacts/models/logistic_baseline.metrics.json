@@ -1,0 +1,230 @@
+{
+  "model_kind": "logistic_regression_baseline",
+  "model_format_version": 1,
+  "data_path": "data/synthetic/recovery_history.csv",
+  "rows": 9914,
+  "train_rows": 7931,
+  "test_rows": 1983,
+  "train_positive_rate": 0.46148026730551,
+  "test_positive_rate": 0.46142208774583965,
+  "random_state": 42,
+  "test_size": 0.2,
+  "target_column": "recovered",
+  "feature_count_before_encoding": 46,
+  "categorical_features": [
+    "merchant_archetype",
+    "case_type",
+    "currency",
+    "payment_method",
+    "bank",
+    "error_code",
+    "error_source",
+    "error_step",
+    "error_reason",
+    "failure_class",
+    "diagnosis_certainty",
+    "preferred_payment_method",
+    "preferred_channel",
+    "language_preference",
+    "action_type",
+    "channel",
+    "policy_decision_at_selection"
+  ],
+  "numeric_features": [
+    "merchant_average_order_value",
+    "amount_to_average_order_ratio",
+    "amount_at_risk",
+    "payment_attempt_number",
+    "subscription_retry_count",
+    "invoice_days_overdue",
+    "attempt_count",
+    "recovery_retry_count",
+    "previous_contacts",
+    "case_age_hours",
+    "customer_lifetime_value",
+    "historical_payment_success_rate",
+    "successful_payments",
+    "failed_payments",
+    "previous_recovery_attempts",
+    "previous_recovery_successes",
+    "previous_recovery_success_rate",
+    "customer_tenure_days",
+    "action_amount",
+    "eligible_action_count",
+    "action_delay_hours"
+  ],
+  "boolean_features": [
+    "mandate_active",
+    "temporary_failure",
+    "retry_same_method_reasonable",
+    "requires_new_payment_method",
+    "customer_action_required",
+    "merchant_action_required",
+    "customer_do_not_contact",
+    "was_deferred"
+  ],
+  "excluded_identifiers": [
+    "history_id",
+    "case_id",
+    "merchant_id",
+    "customer_id"
+  ],
+  "excluded_post_outcome": [
+    "fully_recovered",
+    "outcome",
+    "recovered_amount",
+    "recovered_fraction",
+    "recovery_delay_hours",
+    "remaining_amount_after"
+  ],
+  "excluded_logging_only": [
+    "behavior_selection_probability"
+  ],
+  "excluded_hidden_simulator": [
+    "expected_failure_class",
+    "latent_recovery_probability",
+    "random_draw"
+  ],
+  "metrics": {
+    "threshold": 0.5,
+    "accuracy": 0.6187594553706506,
+    "precision": 0.5900339750849377,
+    "recall": 0.5693989071038251,
+    "f1": 0.5795328142380423,
+    "roc_auc": 0.6697294365649495,
+    "average_precision": 0.5976009108392608,
+    "log_loss": 0.6394959532631146,
+    "brier_score": 0.22538816632449943,
+    "majority_class_accuracy": 0.5385779122541604,
+    "true_negative": 706,
+    "false_positive": 362,
+    "false_negative": 394,
+    "true_positive": 521
+  },
+  "top_coefficients": {
+    "positive": [
+      {
+        "feature": "categorical__action_type_escalate_to_human",
+        "coefficient": 2.1855940025868033
+      },
+      {
+        "feature": "categorical__channel_email",
+        "coefficient": 0.8879059363301206
+      },
+      {
+        "feature": "categorical__action_type_request_new_payment_method",
+        "coefficient": 0.7206448873687269
+      },
+      {
+        "feature": "boolean__retry_same_method_reasonable",
+        "coefficient": 0.43400250867114487
+      },
+      {
+        "feature": "categorical__action_type_offer_partial_payment",
+        "coefficient": 0.3782770970455253
+      },
+      {
+        "feature": "categorical__action_type_immediate_retry",
+        "coefficient": 0.35082290888893836
+      },
+      {
+        "feature": "categorical__error_source_issuer_bank",
+        "coefficient": 0.35061929768705974
+      },
+      {
+        "feature": "numeric__action_delay_hours",
+        "coefficient": 0.3414414168016106
+      },
+      {
+        "feature": "boolean__temporary_failure",
+        "coefficient": 0.3074464323155545
+      },
+      {
+        "feature": "categorical__error_reason_debit_instrument_inactive",
+        "coefficient": 0.2953100826998507
+      },
+      {
+        "feature": "categorical__failure_class_inactive_instrument",
+        "coefficient": 0.2953100826998507
+      },
+      {
+        "feature": "categorical__action_type_delayed_retry",
+        "coefficient": 0.2941104443636241
+      },
+      {
+        "feature": "categorical__error_source_gateway",
+        "coefficient": 0.29239128768063494
+      },
+      {
+        "feature": "categorical__error_code_GATEWAY_ERROR",
+        "coefficient": 0.29239128768063494
+      },
+      {
+        "feature": "categorical__merchant_archetype_b2b_invoicing",
+        "coefficient": 0.2774705810052536
+      }
+    ],
+    "negative": [
+      {
+        "feature": "categorical__action_type_stop",
+        "coefficient": -1.7207815222274119
+      },
+      {
+        "feature": "categorical__action_type_wait",
+        "coefficient": -1.3472103497361347
+      },
+      {
+        "feature": "categorical__channel_sms",
+        "coefficient": -0.7976524326319783
+      },
+      {
+        "feature": "categorical__action_type_send_reminder",
+        "coefficient": -0.6347878879415131
+      },
+      {
+        "feature": "categorical__error_source_razorpay",
+        "coefficient": -0.40213795399225455
+      },
+      {
+        "feature": "categorical__error_reason_payment_risk_check_failed",
+        "coefficient": -0.40213795399225455
+      },
+      {
+        "feature": "categorical__failure_class_risk_decline",
+        "coefficient": -0.40213795399225455
+      },
+      {
+        "feature": "categorical__failure_class_unknown",
+        "coefficient": -0.367824785746746
+      },
+      {
+        "feature": "categorical__error_reason_provider_unclassified_error",
+        "coefficient": -0.367824785746746
+      },
+      {
+        "feature": "categorical__diagnosis_certainty_unknown",
+        "coefficient": -0.367824785746746
+      },
+      {
+        "feature": "categorical__error_source_external_provider",
+        "coefficient": -0.367824785746746
+      },
+      {
+        "feature": "categorical__error_code_UNKNOWN_ERROR",
+        "coefficient": -0.367824785746746
+      },
+      {
+        "feature": "categorical__failure_class_overdue_receivable",
+        "coefficient": -0.3193532926778349
+      },
+      {
+        "feature": "categorical__case_type_overdue_invoice",
+        "coefficient": -0.3193532926778349
+      },
+      {
+        "feature": "boolean__mandate_active",
+        "coefficient": -0.2587645209713098
+      }
+    ]
+  }
+}
