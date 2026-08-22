@@ -1,0 +1,196 @@
+{
+  "model_kind": "catboost_recovery_model",
+  "model_format_version": 2,
+  "data_path": "data/synthetic/recovery_history.csv",
+  "rows": 9914,
+  "train_rows": 7931,
+  "test_rows": 1983,
+  "train_positive_rate": 0.46148026730551,
+  "test_positive_rate": 0.46142208774583965,
+  "random_state": 42,
+  "test_size": 0.2,
+  "target_column": "recovered",
+  "feature_count": 46,
+  "categorical_features": [
+    "merchant_archetype",
+    "case_type",
+    "currency",
+    "payment_method",
+    "bank",
+    "error_code",
+    "error_source",
+    "error_step",
+    "error_reason",
+    "failure_class",
+    "diagnosis_certainty",
+    "preferred_payment_method",
+    "preferred_channel",
+    "language_preference",
+    "action_type",
+    "channel",
+    "policy_decision_at_selection"
+  ],
+  "numeric_features": [
+    "merchant_average_order_value",
+    "amount_to_average_order_ratio",
+    "amount_at_risk",
+    "payment_attempt_number",
+    "subscription_retry_count",
+    "invoice_days_overdue",
+    "attempt_count",
+    "recovery_retry_count",
+    "previous_contacts",
+    "case_age_hours",
+    "customer_lifetime_value",
+    "historical_payment_success_rate",
+    "successful_payments",
+    "failed_payments",
+    "previous_recovery_attempts",
+    "previous_recovery_successes",
+    "previous_recovery_success_rate",
+    "customer_tenure_days",
+    "action_amount",
+    "eligible_action_count",
+    "action_delay_hours"
+  ],
+  "boolean_features": [
+    "mandate_active",
+    "temporary_failure",
+    "retry_same_method_reasonable",
+    "requires_new_payment_method",
+    "customer_action_required",
+    "merchant_action_required",
+    "customer_do_not_contact",
+    "was_deferred"
+  ],
+  "excluded_identifiers": [
+    "history_id",
+    "case_id",
+    "merchant_id",
+    "customer_id"
+  ],
+  "excluded_post_outcome": [
+    "fully_recovered",
+    "outcome",
+    "recovered_amount",
+    "recovered_fraction",
+    "recovery_delay_hours",
+    "remaining_amount_after"
+  ],
+  "excluded_logging_only": [
+    "behavior_selection_probability"
+  ],
+  "excluded_hidden_simulator": [
+    "expected_failure_class",
+    "latent_recovery_probability",
+    "random_draw"
+  ],
+  "hyperparameters": {
+    "iterations": 890,
+    "depth": 2,
+    "learning_rate": 0.03,
+    "l2_leaf_reg": 10.0,
+    "one_hot_max_size": 5,
+    "random_strength": 0.5,
+    "boosting_type": "Ordered",
+    "threads": 1
+  },
+  "metrics": {
+    "threshold": 0.5,
+    "accuracy": 0.6111951588502269,
+    "precision": 0.5884520884520884,
+    "recall": 0.5234972677595628,
+    "f1": 0.5540775014459225,
+    "roc_auc": 0.6679703649127116,
+    "average_precision": 0.5952157545134075,
+    "log_loss": 0.639870852754354,
+    "brier_score": 0.22550858883086022,
+    "majority_class_accuracy": 0.5385779122541604,
+    "true_negative": 733,
+    "false_positive": 335,
+    "false_negative": 436,
+    "true_positive": 479
+  },
+  "top_feature_importance": [
+    {
+      "feature": "action_type",
+      "importance": 52.725771275186474
+    },
+    {
+      "feature": "error_source",
+      "importance": 10.107543770795969
+    },
+    {
+      "feature": "previous_recovery_success_rate",
+      "importance": 4.296697039056009
+    },
+    {
+      "feature": "historical_payment_success_rate",
+      "importance": 4.167393823131173
+    },
+    {
+      "feature": "error_code",
+      "importance": 2.899927193771988
+    },
+    {
+      "feature": "payment_method",
+      "importance": 2.4860048219789594
+    },
+    {
+      "feature": "case_age_hours",
+      "importance": 2.333187252566577
+    },
+    {
+      "feature": "amount_to_average_order_ratio",
+      "importance": 2.0911326016321965
+    },
+    {
+      "feature": "failed_payments",
+      "importance": 2.041213968689761
+    },
+    {
+      "feature": "failure_class",
+      "importance": 1.7087906242903608
+    },
+    {
+      "feature": "diagnosis_certainty",
+      "importance": 1.2976773577623288
+    },
+    {
+      "feature": "previous_recovery_attempts",
+      "importance": 1.2856371615571656
+    },
+    {
+      "feature": "customer_lifetime_value",
+      "importance": 1.2573364257358006
+    },
+    {
+      "feature": "channel",
+      "importance": 1.246224561651054
+    },
+    {
+      "feature": "case_type",
+      "importance": 1.1780276425488594
+    },
+    {
+      "feature": "customer_tenure_days",
+      "importance": 1.092937965109526
+    },
+    {
+      "feature": "error_step",
+      "importance": 1.055881447593955
+    },
+    {
+      "feature": "merchant_average_order_value",
+      "importance": 0.946604697168958
+    },
+    {
+      "feature": "amount_at_risk",
+      "importance": 0.902726676373294
+    },
+    {
+      "feature": "successful_payments",
+      "importance": 0.6977208215813481
+    }
+  ]
+}
