@@ -15,6 +15,12 @@ from simulator.customers import (
     generate_synthetic_population,
 )
 
+from simulator.environment import (
+    RecoveryEnvironment,
+    RecoveryOutcomeType,
+    SimulationResult,
+)
+
 from simulator.merchants import (
     SyntheticMerchant,
     generate_merchants,
@@ -27,6 +33,9 @@ __all__ = [
     "SyntheticPopulation",
     "SyntheticRecoveryScenario",
     "SyntheticCaseBatch",
+    "RecoveryEnvironment",
+    "RecoveryOutcomeType",
+    "SimulationResult",
     "generate_merchants",
     "generate_customers_for_merchant",
     "generate_synthetic_population",
