@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 import numpy as np
@@ -308,17 +309,22 @@ def prepare_model_features(
             )
         )
 
-    for column in CATEGORICAL_FEATURES:
-        series = features[column]
+    def normalize_categorical_value(value):
+        # Domain enums inherit from both str and Enum. Calling str(enum)
+        # produces values such as "RecoveryActionType.WAIT", while the
+        # historical CSV contains the canonical value "wait". Normalize
+        # enums explicitly so training and live inference share one contract.
+        if isinstance(value, Enum):
+            return str(value.value)
 
-        # Keep missing values as np.nan so sklearn's SimpleImputer handles
-        # them. Non-missing values are normalized to strings.
-        features[column] = series.map(
-            lambda value: (
-                str(value)
-                if pd.notna(value)
-                else np.nan
-            )
+        if pd.isna(value):
+            return np.nan
+
+        return str(value)
+
+    for column in CATEGORICAL_FEATURES:
+        features[column] = features[column].map(
+            normalize_categorical_value
         )
 
     return features
