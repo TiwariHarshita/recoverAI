@@ -10,7 +10,7 @@ import pytest
 from app.domain.enums import RecoveryActionType
 from simulator.cases import generate_recovery_cases
 from simulator.customers import generate_synthetic_population
-from backend.simulator.evaluation import (
+from simulator.evaluation import (
     EvaluationPolicy,
     evaluate_policy_batch,
     select_rules_first_action,

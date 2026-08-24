@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import (
+from app.db.models import (
     AuditEventRecord,
     CustomerRecord,
     InvoiceRecord,

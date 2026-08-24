@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: recoverai-postgres
+    environment:
+      POSTGRES_DB: recoverai
+      POSTGRES_USER: recoverai
+      POSTGRES_PASSWORD: recoverai
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recoverai -d recoverai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - recoverai_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  recoverai_postgres_data:
