@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from backend.app.db.repositories import (
+from app.db.repositories import (
     AuditEventRepository,
     InvoiceRepository,
     PaymentRepository,
@@ -28,7 +28,7 @@ from app.domain.enums import (
     SubscriptionStatus,
 )
 from app.domain.recovery_case import RecoveryCase
-from backend.app.integrations.razorpay_webhooks import (
+from app.integrations.razorpay_webhooks import (
     NormalizedRazorpayWebhook,
     RazorpayWebhookSettings,
     derive_event_id,
