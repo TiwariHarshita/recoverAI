@@ -1,4 +1,4 @@
-from backend.app.db.database import create_schema, get_database_url
+from app.db.database import create_schema, get_database_url
 
 
 def main() -> None:

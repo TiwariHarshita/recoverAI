@@ -24,7 +24,7 @@ from app.domain.enums import (
     SubscriptionStatus,
 )
 from app.domain.invoice import Invoice
-from app.domain.payment import Payment
+from app.domain.payment_attempt import PaymentAttempt
 from app.domain.recovery_case import RecoveryCase
 from app.domain.subscription import Subscription
 
@@ -62,7 +62,7 @@ class SyntheticRecoveryScenario(BaseModel):
 
     expected_failure_class: FailureClass
 
-    payment: Payment | None = None
+    payment: PaymentAttempt | None = None
 
     subscription: Subscription | None = None
 
@@ -461,7 +461,7 @@ def _build_payment_failure(
     # Failed Payment entity
     # --------------------------------------------------------
 
-    payment = Payment(
+    payment = PaymentAttempt(
         id=payment_id,
         merchant_id=merchant.id,
         customer_id=customer.id,
@@ -486,10 +486,6 @@ def _build_payment_failure(
             template.error_description
         ),
         created_at=event_at,
-        raw_payload={
-            "synthetic": True,
-            "scenario_token": token,
-        },
     )
 
     # --------------------------------------------------------

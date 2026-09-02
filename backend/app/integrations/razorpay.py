@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -8,8 +7,12 @@ from typing import Any, Mapping
 
 import httpx
 
+from app.config import (
+    ApplicationSettings,
+    DEFAULT_RAZORPAY_BASE_URL,
+    DEFAULT_RAZORPAY_TIMEOUT_SECONDS,
+)
 
-DEFAULT_RAZORPAY_BASE_URL = "https://api.razorpay.com/v1"
 _ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 
 
@@ -61,7 +64,7 @@ class RazorpaySettings:
     key_id: str
     key_secret: str
     base_url: str = DEFAULT_RAZORPAY_BASE_URL
-    timeout_seconds: float = 10.0
+    timeout_seconds: float = DEFAULT_RAZORPAY_TIMEOUT_SECONDS
     enforce_test_mode: bool = True
 
     def __post_init__(self) -> None:
@@ -91,19 +94,18 @@ class RazorpaySettings:
 
     @classmethod
     def from_env(cls) -> "RazorpaySettings":
-        timeout_raw = os.getenv("RAZORPAY_TIMEOUT_SECONDS", "10")
         try:
-            timeout = float(timeout_raw)
+            settings = ApplicationSettings.from_env()
         except ValueError as exc:
             raise RazorpayConfigurationError(
                 "RAZORPAY_TIMEOUT_SECONDS must be numeric"
             ) from exc
 
         return cls(
-            key_id=os.getenv("RAZORPAY_KEY_ID", ""),
-            key_secret=os.getenv("RAZORPAY_KEY_SECRET", ""),
-            base_url=os.getenv("RAZORPAY_BASE_URL", DEFAULT_RAZORPAY_BASE_URL),
-            timeout_seconds=timeout,
+            key_id=settings.razorpay_key_id,
+            key_secret=settings.razorpay_key_secret,
+            base_url=settings.razorpay_base_url,
+            timeout_seconds=settings.razorpay_timeout_seconds,
             enforce_test_mode=True,
         )
 

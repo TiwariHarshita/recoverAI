@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from .actions import RecoveryAction
 from .enums import PolicyDecision, RecoveryActionType
+from .merchant import Merchant
 
 
 class SelectionOutcome(str, Enum):
@@ -21,21 +22,9 @@ class SelectionOutcome(str, Enum):
     NO_ELIGIBLE_ACTION = "no_eligible_action"
 
 
-class MerchantScoringProfile(BaseModel):
-    """
-    Merchant facts required by the recovery-probability model.
-
-    This deliberately does not depend on simulator.SyntheticMerchant.
-    Later the same object can be built from persisted merchant data.
-    """
-
-    merchant_id: str
-
-    archetype: str
-
-    average_order_value: Decimal = Field(
-        gt=0
-    )
+# Backward-compatible public name. There is one production merchant model;
+# scoring no longer defines a competing merchant representation.
+MerchantScoringProfile = Merchant
 
 
 class RecoverySourceContext(BaseModel):

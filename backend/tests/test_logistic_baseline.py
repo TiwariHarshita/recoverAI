@@ -9,6 +9,8 @@ import pytest
 from app.ml.dataset import (
     FORBIDDEN_MODEL_COLUMNS,
     MODEL_FEATURES,
+    GroupingStrategy,
+    assert_no_forbidden_identity_overlap,
     prepare_model_features,
     split_historical_dataframe,
 )
@@ -107,7 +109,7 @@ def test_prepare_model_features_uses_only_allow_list(
     )
 
 
-def test_shared_split_is_deterministic_and_stratified(
+def test_shared_split_is_deterministic_grouped_and_balanced(
     historical_frame,
 ):
     first = split_historical_dataframe(
@@ -126,6 +128,12 @@ def test_shared_split_is_deterministic_and_stratified(
         first.train.index
     ) == list(
         second.train.index
+    )
+
+    assert list(
+        first.validation.index
+    ) == list(
+        second.validation.index
     )
 
     assert list(
@@ -151,6 +159,34 @@ def test_shared_split_is_deterministic_and_stratified(
         abs=0.02,
     )
 
+    assert_no_forbidden_identity_overlap(first)
+    partition_customers = [
+        set(frame["customer_id"])
+        for frame in (first.train, first.validation, first.test)
+    ]
+    assert partition_customers[0].isdisjoint(partition_customers[1])
+    assert partition_customers[0].isdisjoint(partition_customers[2])
+    assert partition_customers[1].isdisjoint(partition_customers[2])
+
+
+def test_merchant_grouping_prevents_merchant_and_customer_leakage(
+    historical_frame,
+):
+    split = split_historical_dataframe(
+        historical_frame,
+        random_state=43,
+        grouping_strategy=GroupingStrategy.MERCHANT,
+    )
+
+    assert_no_forbidden_identity_overlap(split)
+    for identity in ("merchant_id", "customer_id"):
+        train = set(split.train[identity])
+        validation = set(split.validation[identity])
+        test = set(split.test[identity])
+        assert train.isdisjoint(validation)
+        assert train.isdisjoint(test)
+        assert validation.isdisjoint(test)
+
 
 def test_training_produces_probability_metrics(
     historical_frame,
@@ -163,6 +199,7 @@ def test_training_produces_probability_metrics(
 
     assert (
         result.train_rows
+        + result.validation_rows
         + result.test_rows
         == len(historical_frame)
     )
@@ -276,6 +313,8 @@ def test_save_and_load_preserve_predictions(
         )
     )
 
+    raw_before = result.model.predict_raw_recovery_probability(sample)
+
     artifact_path = (
         tmp_path
         / "logistic.joblib"
@@ -298,12 +337,17 @@ def test_save_and_load_preserve_predictions(
         )
     )
 
+    raw_after = loaded.predict_raw_recovery_probability(sample)
+
     np.testing.assert_allclose(
         before,
         after,
         rtol=0,
         atol=1e-12,
     )
+    np.testing.assert_allclose(raw_before, raw_after, rtol=0, atol=1e-12)
+    assert loaded.calibrator is not None
+    assert loaded.training_metadata["grouping_strategy"] == "customer"
 
 
 def test_training_is_deterministic_for_same_seed(

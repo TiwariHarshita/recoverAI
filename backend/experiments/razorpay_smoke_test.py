@@ -4,7 +4,7 @@ import argparse
 import json
 from decimal import Decimal
 
-from backend.app.integrations.razorpay import (
+from app.integrations.razorpay import (
     PaymentLinkRequest,
     RazorpayClient,
     RazorpaySettings,

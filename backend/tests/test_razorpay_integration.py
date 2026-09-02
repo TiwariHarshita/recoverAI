@@ -6,7 +6,7 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from backend.app.integrations.razorpay import (
+from app.integrations.razorpay import (
     PaymentLinkCustomer,
     PaymentLinkRequest,
     RazorpayAPIError,

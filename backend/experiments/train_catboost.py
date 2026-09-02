@@ -21,6 +21,7 @@ from app.ml.dataset import (
     NUMERIC_FEATURES,
     POST_OUTCOME_COLUMNS,
     TARGET_COLUMN,
+    GroupingStrategy,
     load_historical_csv,
 )
 
@@ -58,9 +59,21 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--validation-size",
+        type=float,
+        default=0.15,
+    )
+
+    parser.add_argument(
         "--test-size",
         type=float,
-        default=0.20,
+        default=0.15,
+    )
+
+    parser.add_argument(
+        "--grouping-strategy",
+        choices=[strategy.value for strategy in GroupingStrategy],
+        default=GroupingStrategy.CUSTOMER.value,
     )
 
     parser.add_argument(
@@ -170,6 +183,8 @@ def main() -> None:
     result = train_catboost_model(
         dataframe,
 
+        validation_size=args.validation_size,
+
         test_size=(
             args.test_size
         ),
@@ -177,6 +192,10 @@ def main() -> None:
         random_state=(
             args.seed
         ),
+
+        grouping_strategy=args.grouping_strategy,
+
+        data_generation_reference=str(args.data),
 
         threshold=(
             args.threshold
@@ -251,6 +270,8 @@ def main() -> None:
             result.train_rows
         ),
 
+        "validation_rows": int(result.validation_rows),
+
         "test_rows": int(
             result.test_rows
         ),
@@ -258,6 +279,8 @@ def main() -> None:
         "train_positive_rate": float(
             result.train_positive_rate
         ),
+
+        "validation_positive_rate": float(result.validation_positive_rate),
 
         "test_positive_rate": float(
             result.test_positive_rate
@@ -270,6 +293,12 @@ def main() -> None:
         "test_size": float(
             args.test_size
         ),
+
+        "validation_size": float(args.validation_size),
+
+        "grouping_strategy": args.grouping_strategy,
+
+        "split_metadata": result.split_metadata,
 
         "target_column": (
             TARGET_COLUMN
@@ -341,9 +370,13 @@ def main() -> None:
             ),
         },
 
-        "metrics": (
-            result.metrics
-        ),
+        "calibration_method": result.model.training_metadata["calibration_method"],
+
+        "raw_metrics": result.raw_metrics,
+
+        "calibrated_metrics": result.calibrated_metrics,
+
+        "metrics": result.calibrated_metrics,
 
         "top_feature_importance": (
             _top_feature_importance(
@@ -384,8 +417,9 @@ def main() -> None:
     )
 
     print(
-        "Train/Test: "
+        "Train/Validation/Test: "
         f"{result.train_rows}/"
+        f"{result.validation_rows}/"
         f"{result.test_rows}"
     )
 
@@ -395,8 +429,9 @@ def main() -> None:
     )
 
     print(
-        "ROC-AUC: "
-        f"{result.metrics['roc_auc']:.4f}"
+        "Raw/Calibrated ROC-AUC: "
+        f"{result.raw_metrics['roc_auc']:.4f}/"
+        f"{result.calibrated_metrics['roc_auc']:.4f}"
     )
 
     print(

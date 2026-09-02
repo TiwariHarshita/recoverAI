@@ -1,8 +1,44 @@
+from enum import Enum
+from math import log
+
+from pydantic import BaseModel, ConfigDict
+
 from app.domain.enums import (
     FailureClass,
     PaymentMethod,
     RecoveryActionType,
 )
+
+
+class RecoverySensitivity(str, Enum):
+    """Named synthetic recovery conditions used for sensitivity analysis."""
+
+    CONSERVATIVE = "conservative"
+    NEUTRAL = "neutral"
+    OPTIMISTIC = "optimistic"
+
+
+class RecoverySimulationConfig(BaseModel):
+    """Serializable selection of the simulator's hidden assumption regime."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sensitivity: RecoverySensitivity = RecoverySensitivity.NEUTRAL
+
+    @property
+    def log_odds_shift(self) -> float:
+        return SENSITIVITY_LOG_ODDS_SHIFTS[self.sensitivity]
+
+
+# Sensitivity modifies every non-terminal recovery action's odds uniformly.
+# Conservative multiplies neutral odds by 0.8; optimistic is its reciprocal
+# and multiplies them by 1.25. The symmetric log shifts avoid probability
+# clipping and make the scenario meaning explicit rather than action-specific.
+SENSITIVITY_LOG_ODDS_SHIFTS: dict[RecoverySensitivity, float] = {
+    RecoverySensitivity.CONSERVATIVE: log(0.8),
+    RecoverySensitivity.NEUTRAL: 0.0,
+    RecoverySensitivity.OPTIMISTIC: log(1.25),
+}
 
 
 # ============================================================
@@ -238,11 +274,11 @@ DEFAULT_ACTION_PROBABILITIES: dict[
 
 
 # ============================================================
-# SYNTHETIC PAYMENT-METHOD EFFECTS
+# SYNTHETIC PAYMENT-METHOD LOG-ODDS EFFECTS
 # ============================================================
 
 """
-Small synthetic effects only.
+Small synthetic log-odds effects only.
 
 These exist so payment_method can carry real predictive signal in the
 future ML dataset.
@@ -251,7 +287,7 @@ They are NOT real-world claims about method performance.
 """
 
 
-PAYMENT_METHOD_RECOVERY_OFFSETS: dict[
+PAYMENT_METHOD_RECOVERY_LOG_ODDS_EFFECTS: dict[
     PaymentMethod,
     float,
 ] = {
@@ -266,7 +302,7 @@ PAYMENT_METHOD_RECOVERY_OFFSETS: dict[
 
 
 # ============================================================
-# SYNTHETIC BANK EFFECTS
+# SYNTHETIC BANK LOG-ODDS EFFECTS
 # ============================================================
 
 """
@@ -276,7 +312,7 @@ Do not interpret them as claims about actual banks.
 """
 
 
-BANK_RECOVERY_OFFSETS: dict[
+BANK_RECOVERY_LOG_ODDS_EFFECTS: dict[
     str,
     float,
 ] = {

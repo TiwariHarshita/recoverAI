@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import (
     Decimal,
     ROUND_HALF_UP,
@@ -16,6 +17,7 @@ from app.domain.enums import (
     PaymentMethod,
     RecoveryActionType,
 )
+from app.domain.merchant import Merchant
 from app.domain.policies import (
     MerchantPolicy,
 )
@@ -30,28 +32,14 @@ from simulator.random_utils import (
 )
 
 
-class SyntheticMerchant(BaseModel):
+class SyntheticMerchant(Merchant):
     """
-    Simulator-only merchant profile.
-
-    We intentionally do not add a Merchant model to app.domain yet.
-
-    The real domain object we already have is MerchantPolicy.
-    SyntheticMerchant simply adds behavioural parameters needed
-    to generate customers and recovery cases.
+    Canonical merchant facts plus simulator-only behavioural parameters.
     """
-
-    id: str
-
-    name: str
 
     archetype: MerchantArchetype
 
     policy: MerchantPolicy
-
-    average_order_value: Decimal = Field(
-        ge=0
-    )
 
     payment_method_weights: dict[
         PaymentMethod,
@@ -189,6 +177,13 @@ def generate_merchants(
 
         merchant = SyntheticMerchant(
             id=merchant_id,
+
+            created_at=datetime(
+                2026,
+                1,
+                1,
+                tzinfo=timezone.utc,
+            ),
 
             name=(
                 "Synthetic "

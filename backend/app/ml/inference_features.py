@@ -7,13 +7,13 @@ from decimal import Decimal
 import pandas as pd
 
 from app.domain.action_scoring import (
-    MerchantScoringProfile,
     RecoverySourceContext,
 )
 from app.domain.actions import RecoveryAction
 from app.domain.customer import Customer
 from app.domain.diagnosis import DiagnosisResult
 from app.domain.enums import PolicyDecision
+from app.domain.merchant import Merchant
 from app.domain.recovery_case import RecoveryCase
 from app.ml.dataset import MODEL_FEATURES
 
@@ -57,7 +57,7 @@ def build_action_feature_row(
     customer: Customer,
     diagnosis: DiagnosisResult,
     action: RecoveryAction,
-    merchant: MerchantScoringProfile,
+    merchant: Merchant,
     source: RecoverySourceContext,
     policy_decision: PolicyDecision,
     eligible_action_count: int,

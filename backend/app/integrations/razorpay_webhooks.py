@@ -3,12 +3,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping
 
+from app.config import ApplicationSettings
 from app.domain.enums import InvoiceStatus, PaymentMethod, PaymentStatus, SubscriptionStatus
 from app.domain.invoice import Invoice
 from app.domain.payment import Payment
@@ -43,7 +43,9 @@ class RazorpayWebhookSettings:
 
     @classmethod
     def from_env(cls) -> "RazorpayWebhookSettings":
-        return cls(webhook_secret=os.getenv("RAZORPAY_WEBHOOK_SECRET", ""))
+        return cls(
+            webhook_secret=ApplicationSettings.from_env().razorpay_webhook_secret
+        )
 
     def __repr__(self) -> str:
         return "RazorpayWebhookSettings(webhook_secret='***REDACTED***')"

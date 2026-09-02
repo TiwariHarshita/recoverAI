@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from app.domain.action_scoring import (
-    MerchantScoringProfile,
     RecoverySourceContext,
 )
+from app.domain.merchant import Merchant
 from app.ml.catboost_model import (
     CatBoostRecoveryModel,
 )
@@ -128,7 +128,7 @@ def main() -> None:
     # ========================================================
 
     merchant_profile = (
-        MerchantScoringProfile(
+        Merchant(
 
             merchant_id=(
                 merchant.id

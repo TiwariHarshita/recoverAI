@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import inspect
 
 from app.api.webhooks import get_db_session
-from backend.app.db import (
+from app.db import (
     AuditEventRepository,
     InvoiceRepository,
     PaymentRepository,
@@ -32,7 +32,7 @@ from app.domain.enums import (
     SubscriptionStatus,
 )
 from app.domain.recovery_case import RecoveryCase
-from backend.app.integrations.razorpay_webhooks import (
+from app.integrations.razorpay_webhooks import (
     RazorpayWebhookPayloadError,
     RazorpayWebhookSettings,
     RazorpayWebhookSignatureError,
@@ -41,8 +41,8 @@ from backend.app.integrations.razorpay_webhooks import (
     parse_razorpay_webhook,
     verify_razorpay_webhook_signature,
 )
-from backend.app.main import app
-from backend.app.services.webhook_processor import RazorpayWebhookProcessor
+from app.main import app
+from app.services.webhook_processor import RazorpayWebhookProcessor
 
 
 SECRET = "whsec_recoverai_test_only"

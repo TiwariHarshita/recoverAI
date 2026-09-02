@@ -10,35 +10,33 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    accuracy_score,
-    average_precision_score,
-    brier_score_loss,
-    confusion_matrix,
-    f1_score,
-    log_loss,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+from app.ml.artifact_contract import (
+    ModelArtifactValidationError,
+    validate_canonical_artifact_metadata,
+)
+from app.ml.calibration import CALIBRATION_METHOD, PlattProbabilityCalibrator
 from app.ml.dataset import (
     BOOLEAN_FEATURES,
     CATEGORICAL_FEATURES,
     MODEL_FEATURES,
     NUMERIC_FEATURES,
     TARGET_COLUMN,
+    GroupingStrategy,
+    historical_dataframe_fingerprint,
     prepare_model_features,
     prepare_target,
+    split_audit_metadata,
     split_historical_dataframe,
     validate_historical_dataframe,
 )
+from app.ml.evaluation import evaluate_probabilities
 
 
 MODEL_KIND = "logistic_regression_baseline"
-MODEL_FORMAT_VERSION = 1
+MODEL_FORMAT_VERSION = 2
 DEFAULT_THRESHOLD = 0.5
 
 
@@ -46,10 +44,15 @@ DEFAULT_THRESHOLD = 0.5
 class BaselineTrainingResult:
     model: "LogisticRecoveryBaseline"
     metrics: dict[str, float | int]
+    raw_metrics: dict[str, float | int]
+    calibrated_metrics: dict[str, float | int]
     train_rows: int
+    validation_rows: int
     test_rows: int
     train_positive_rate: float
+    validation_positive_rate: float
     test_positive_rate: float
+    split_metadata: dict[str, object]
 
 
 class LogisticRecoveryBaseline:
@@ -69,6 +72,8 @@ class LogisticRecoveryBaseline:
         self.random_state = random_state
         self.max_iter = max_iter
         self.pipeline = self._build_pipeline()
+        self.calibrator: PlattProbabilityCalibrator | None = None
+        self.training_metadata: dict[str, Any] = {}
         self._is_fitted = False
 
     def _build_pipeline(self) -> Pipeline:
@@ -189,11 +194,11 @@ class LogisticRecoveryBaseline:
                 "LogisticRecoveryBaseline has not been fitted yet."
             )
 
-    def predict_recovery_probability(
+    def predict_raw_recovery_probability(
         self,
         dataframe: pd.DataFrame,
     ) -> np.ndarray:
-        """Return P(recovered=1) for each row."""
+        """Return the uncalibrated model probability for each row."""
 
         self._require_fitted()
 
@@ -209,6 +214,26 @@ class LogisticRecoveryBaseline:
             probabilities,
             dtype=float,
         )
+
+    def fit_calibration(self, dataframe: pd.DataFrame) -> None:
+        """Fit Platt calibration using a validation partition only."""
+
+        target = prepare_target(dataframe).to_numpy()
+        probabilities = self.predict_raw_recovery_probability(dataframe)
+        self.calibrator = PlattProbabilityCalibrator().fit(probabilities, target)
+
+    def predict_recovery_probability(
+        self,
+        dataframe: pd.DataFrame,
+    ) -> np.ndarray:
+        """Return canonical calibrated P(recovery | case, action)."""
+
+        if self.calibrator is None:
+            raise ModelArtifactValidationError(
+                "Canonical prediction requires a fitted probability calibrator."
+            )
+        probabilities = self.predict_raw_recovery_probability(dataframe)
+        return self.calibrator.predict(probabilities)
 
     def predict(
         self,
@@ -289,8 +314,20 @@ class LogisticRecoveryBaseline:
             "max_iter": self.max_iter,
             "model_features": list(MODEL_FEATURES),
             "target_column": TARGET_COLUMN,
+            "calibration": (
+                self.calibrator.to_dict() if self.calibrator is not None else None
+            ),
+            "training_metadata": self.training_metadata,
             "pipeline": self.pipeline,
         }
+
+        validate_canonical_artifact_metadata(
+            payload,
+            expected_model_kind=MODEL_KIND,
+            expected_format_version=MODEL_FORMAT_VERSION,
+            expected_features=tuple(MODEL_FEATURES),
+            expected_target_column=TARGET_COLUMN,
+        )
 
         joblib.dump(
             payload,
@@ -311,155 +348,56 @@ class LogisticRecoveryBaseline:
                 f"Model artifact not found: {input_path}"
             )
 
-        payload = joblib.load(
-            input_path
+        try:
+            payload = joblib.load(input_path)
+        except Exception as exc:
+            raise ModelArtifactValidationError(
+                "Unable to read valid Logistic model artifact metadata."
+            ) from exc
+        calibrator, training_metadata = validate_canonical_artifact_metadata(
+            payload,
+            expected_model_kind=MODEL_KIND,
+            expected_format_version=MODEL_FORMAT_VERSION,
+            expected_features=tuple(MODEL_FEATURES),
+            expected_target_column=TARGET_COLUMN,
         )
 
-        if (
-            payload.get("model_kind")
-            != MODEL_KIND
-        ):
-            raise ValueError(
-                "Artifact is not a RecoverAI logistic baseline model."
-            )
-
-        if (
-            payload.get("model_format_version")
-            != MODEL_FORMAT_VERSION
-        ):
-            raise ValueError(
-                "Unsupported logistic baseline artifact version."
-            )
-
-        if tuple(
-            payload.get(
-                "model_features",
-                [],
-            )
-        ) != tuple(MODEL_FEATURES):
-            raise ValueError(
-                "Model artifact feature contract does not match current code."
-            )
-
-        model = cls(
-            random_state=int(
-                payload["random_state"]
-            ),
-            max_iter=int(
-                payload["max_iter"]
-            ),
-        )
-
-        model.pipeline = payload[
-            "pipeline"
+        missing_model_fields = [
+            key for key in ("random_state", "max_iter", "pipeline") if key not in payload
         ]
+        if missing_model_fields:
+            raise ModelArtifactValidationError(
+                "Missing Logistic model metadata: "
+                f"{', '.join(missing_model_fields)}."
+            )
+
+        try:
+            model = cls(
+                random_state=int(payload["random_state"]),
+                max_iter=int(payload["max_iter"]),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ModelArtifactValidationError(
+                "Malformed Logistic model metadata."
+            ) from exc
+
+        model.pipeline = payload["pipeline"]
+        model.calibrator = calibrator
+        model.training_metadata = training_metadata
         model._is_fitted = True
 
         return model
 
 
-def _evaluate_probabilities(
-    y_true: pd.Series,
-    probabilities: np.ndarray,
-    *,
-    threshold: float,
-) -> dict[str, float | int]:
-    predictions = (
-        probabilities
-        >= threshold
-    ).astype(int)
-
-    tn, fp, fn, tp = confusion_matrix(
-        y_true,
-        predictions,
-        labels=[0, 1],
-    ).ravel()
-
-    majority_accuracy = max(
-        float((y_true == 0).mean()),
-        float((y_true == 1).mean()),
-    )
-
-    return {
-        "threshold": float(threshold),
-
-        "accuracy": float(
-            accuracy_score(
-                y_true,
-                predictions,
-            )
-        ),
-
-        "precision": float(
-            precision_score(
-                y_true,
-                predictions,
-                zero_division=0,
-            )
-        ),
-
-        "recall": float(
-            recall_score(
-                y_true,
-                predictions,
-                zero_division=0,
-            )
-        ),
-
-        "f1": float(
-            f1_score(
-                y_true,
-                predictions,
-                zero_division=0,
-            )
-        ),
-
-        "roc_auc": float(
-            roc_auc_score(
-                y_true,
-                probabilities,
-            )
-        ),
-
-        "average_precision": float(
-            average_precision_score(
-                y_true,
-                probabilities,
-            )
-        ),
-
-        "log_loss": float(
-            log_loss(
-                y_true,
-                probabilities,
-                labels=[0, 1],
-            )
-        ),
-
-        "brier_score": float(
-            brier_score_loss(
-                y_true,
-                probabilities,
-            )
-        ),
-
-        "majority_class_accuracy": (
-            majority_accuracy
-        ),
-
-        "true_negative": int(tn),
-        "false_positive": int(fp),
-        "false_negative": int(fn),
-        "true_positive": int(tp),
-    }
-
-
 def train_logistic_baseline(
     dataframe: pd.DataFrame,
     *,
-    test_size: float = 0.20,
+    validation_size: float = 0.15,
+    test_size: float = 0.15,
     random_state: int = 42,
     threshold: float = DEFAULT_THRESHOLD,
+    grouping_strategy: GroupingStrategy | str = GroupingStrategy.CUSTOMER,
+    data_generation_reference: str = "in-memory historical dataframe",
 ) -> BaselineTrainingResult:
     """Train and evaluate a deterministic logistic-regression baseline."""
 
@@ -489,11 +427,14 @@ def train_logistic_baseline(
 
     split = split_historical_dataframe(
         dataframe,
+        validation_size=validation_size,
         test_size=test_size,
         random_state=random_state,
+        grouping_strategy=grouping_strategy,
     )
 
     train_frame = split.train
+    validation_frame = split.validation
     test_frame = split.test
 
     model = LogisticRecoveryBaseline(
@@ -504,30 +445,50 @@ def train_logistic_baseline(
         train_frame
     )
 
+    # Calibration is the only operation after fitting that may learn from the
+    # held-out validation data. The final test partition is not read until both
+    # the raw model and calibrator are frozen.
+    model.fit_calibration(validation_frame)
+
     test_target = prepare_target(
         test_frame
     )
 
-    probabilities = (
-        model.predict_recovery_probability(
-            test_frame
-        )
-    )
+    raw_probabilities = model.predict_raw_recovery_probability(test_frame)
+    calibrated_probabilities = model.predict_recovery_probability(test_frame)
 
-    metrics = _evaluate_probabilities(
+    raw_metrics = evaluate_probabilities(
         test_target,
-        probabilities,
+        raw_probabilities,
         threshold=threshold,
     )
+    calibrated_metrics = evaluate_probabilities(
+        test_target,
+        calibrated_probabilities,
+        threshold=threshold,
+    )
+    audit_metadata = split_audit_metadata(split)
+    model.training_metadata = {
+        "data_generation_reference": data_generation_reference,
+        "data_fingerprint_sha256": historical_dataframe_fingerprint(dataframe),
+        "feature_contract": list(MODEL_FEATURES),
+        **audit_metadata,
+        "calibration_method": CALIBRATION_METHOD,
+        "raw_test_metrics": raw_metrics,
+        "calibrated_test_metrics": calibrated_metrics,
+    }
 
     return BaselineTrainingResult(
         model=model,
-
-        metrics=metrics,
+        metrics=calibrated_metrics,
+        raw_metrics=raw_metrics,
+        calibrated_metrics=calibrated_metrics,
 
         train_rows=len(
             train_frame
         ),
+
+        validation_rows=len(validation_frame),
 
         test_rows=len(
             test_frame
@@ -539,7 +500,11 @@ def train_logistic_baseline(
             ).mean()
         ),
 
+        validation_positive_rate=float(prepare_target(validation_frame).mean()),
+
         test_positive_rate=float(
             test_target.mean()
         ),
+
+        split_metadata=audit_metadata,
     )

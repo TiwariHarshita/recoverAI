@@ -1,3 +1,2 @@
-SQLAlchemy>=2.0,<3.0
-psycopg[binary]>=3.2,<4.0
-httpx>=0.27,<1.0
+# Compatibility entry point. Runtime dependencies are canonical in pyproject.toml.
+-e .

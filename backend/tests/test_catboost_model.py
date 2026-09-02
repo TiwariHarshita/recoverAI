@@ -222,6 +222,13 @@ def test_catboost_uses_same_deterministic_split(
     )
 
     assert (
+        result.validation_rows
+        == len(
+            expected.validation
+        )
+    )
+
+    assert (
         result.test_rows
         == len(
             expected.test
@@ -373,6 +380,8 @@ def test_save_and_load_preserve_predictions(
         )
     )
 
+    raw_before = result.model.predict_raw_recovery_probability(sample)
+
     artifact_path = (
         tmp_path
         / "catboost_recovery.cbm"
@@ -407,12 +416,17 @@ def test_save_and_load_preserve_predictions(
         )
     )
 
+    raw_after = loaded.predict_raw_recovery_probability(sample)
+
     np.testing.assert_allclose(
         before,
         after,
         rtol=0,
         atol=1e-12,
     )
+    np.testing.assert_allclose(raw_before, raw_after, rtol=0, atol=1e-12)
+    assert loaded.calibrator is not None
+    assert loaded.training_metadata["grouping_strategy"] == "customer"
 
 
 def test_training_is_deterministic_for_same_seed(

@@ -1,14 +1,60 @@
 {
   "model_kind": "catboost_recovery_model",
-  "model_format_version": 2,
+  "model_format_version": 3,
   "data_path": "data/synthetic/recovery_history.csv",
   "rows": 9914,
-  "train_rows": 7931,
-  "test_rows": 1983,
-  "train_positive_rate": 0.46148026730551,
-  "test_positive_rate": 0.46142208774583965,
+  "train_rows": 6938,
+  "validation_rows": 1483,
+  "test_rows": 1493,
+  "train_positive_rate": 0.4615162871144422,
+  "validation_positive_rate": 0.4612272420768712,
+  "test_positive_rate": 0.4614869390488948,
   "random_state": 42,
-  "test_size": 0.2,
+  "test_size": 0.15,
+  "validation_size": 0.15,
+  "grouping_strategy": "customer",
+  "split_metadata": {
+    "split_seed": 42,
+    "grouping_strategy": "customer",
+    "grouping_column": "customer_id",
+    "partition_rows": {
+      "train": 6938,
+      "validation": 1483,
+      "test": 1493
+    },
+    "partition_groups": {
+      "train": 1389,
+      "validation": 298,
+      "test": 298
+    },
+    "partition_positive_rates": {
+      "train": 0.4615162871144422,
+      "validation": 0.4612272420768712,
+      "test": 0.4614869390488948
+    },
+    "identity_overlaps": {
+      "history_id": {
+        "train_validation": 0,
+        "train_test": 0,
+        "validation_test": 0
+      },
+      "case_id": {
+        "train_validation": 0,
+        "train_test": 0,
+        "validation_test": 0
+      },
+      "merchant_id": {
+        "train_validation": 20,
+        "train_test": 20,
+        "validation_test": 20
+      },
+      "customer_id": {
+        "train_validation": 0,
+        "train_test": 0,
+        "validation_test": 0
+      }
+    }
+  },
   "target_column": "recovered",
   "feature_count": 46,
   "categorical_features": [
@@ -95,102 +141,144 @@
     "boosting_type": "Ordered",
     "threads": 1
   },
+  "calibration_method": "sigmoid_platt",
+  "raw_metrics": {
+    "threshold": 0.5,
+    "accuracy": 0.607501674480911,
+    "precision": 0.5786259541984733,
+    "recall": 0.5500725689404935,
+    "f1": 0.5639880952380952,
+    "roc_auc": 0.6631681938637726,
+    "average_precision": 0.5948537914108574,
+    "log_loss": 0.6391766415736595,
+    "brier_score": 0.22555834416813209,
+    "calibration_mean_absolute_error": 0.03544955936303535,
+    "calibration_max_error": 0.16015814212427282,
+    "calibration_nonempty_bins": 8,
+    "majority_class_accuracy": 0.5385130609511052,
+    "true_negative": 528,
+    "false_positive": 276,
+    "false_negative": 310,
+    "true_positive": 379
+  },
+  "calibrated_metrics": {
+    "threshold": 0.5,
+    "accuracy": 0.6068318821165438,
+    "precision": 0.5726495726495726,
+    "recall": 0.5834542815674891,
+    "f1": 0.578001437814522,
+    "roc_auc": 0.6631681938637726,
+    "average_precision": 0.5948537914108574,
+    "log_loss": 0.638779714664809,
+    "brier_score": 0.22544238042317474,
+    "calibration_mean_absolute_error": 0.015960958263720182,
+    "calibration_max_error": 0.03294431821416366,
+    "calibration_nonempty_bins": 8,
+    "majority_class_accuracy": 0.5385130609511052,
+    "true_negative": 504,
+    "false_positive": 300,
+    "false_negative": 287,
+    "true_positive": 402
+  },
   "metrics": {
     "threshold": 0.5,
-    "accuracy": 0.6111951588502269,
-    "precision": 0.5884520884520884,
-    "recall": 0.5234972677595628,
-    "f1": 0.5540775014459225,
-    "roc_auc": 0.6679703649127116,
-    "average_precision": 0.5952157545134075,
-    "log_loss": 0.639870852754354,
-    "brier_score": 0.22550858883086022,
-    "majority_class_accuracy": 0.5385779122541604,
-    "true_negative": 733,
-    "false_positive": 335,
-    "false_negative": 436,
-    "true_positive": 479
+    "accuracy": 0.6068318821165438,
+    "precision": 0.5726495726495726,
+    "recall": 0.5834542815674891,
+    "f1": 0.578001437814522,
+    "roc_auc": 0.6631681938637726,
+    "average_precision": 0.5948537914108574,
+    "log_loss": 0.638779714664809,
+    "brier_score": 0.22544238042317474,
+    "calibration_mean_absolute_error": 0.015960958263720182,
+    "calibration_max_error": 0.03294431821416366,
+    "calibration_nonempty_bins": 8,
+    "majority_class_accuracy": 0.5385130609511052,
+    "true_negative": 504,
+    "false_positive": 300,
+    "false_negative": 287,
+    "true_positive": 402
   },
   "top_feature_importance": [
     {
       "feature": "action_type",
-      "importance": 52.725771275186474
+      "importance": 56.40723025671198
     },
     {
       "feature": "error_source",
-      "importance": 10.107543770795969
-    },
-    {
-      "feature": "previous_recovery_success_rate",
-      "importance": 4.296697039056009
-    },
-    {
-      "feature": "historical_payment_success_rate",
-      "importance": 4.167393823131173
-    },
-    {
-      "feature": "error_code",
-      "importance": 2.899927193771988
-    },
-    {
-      "feature": "payment_method",
-      "importance": 2.4860048219789594
-    },
-    {
-      "feature": "case_age_hours",
-      "importance": 2.333187252566577
-    },
-    {
-      "feature": "amount_to_average_order_ratio",
-      "importance": 2.0911326016321965
-    },
-    {
-      "feature": "failed_payments",
-      "importance": 2.041213968689761
-    },
-    {
-      "feature": "failure_class",
-      "importance": 1.7087906242903608
-    },
-    {
-      "feature": "diagnosis_certainty",
-      "importance": 1.2976773577623288
-    },
-    {
-      "feature": "previous_recovery_attempts",
-      "importance": 1.2856371615571656
-    },
-    {
-      "feature": "customer_lifetime_value",
-      "importance": 1.2573364257358006
-    },
-    {
-      "feature": "channel",
-      "importance": 1.246224561651054
-    },
-    {
-      "feature": "case_type",
-      "importance": 1.1780276425488594
+      "importance": 6.499007227017804
     },
     {
       "feature": "customer_tenure_days",
-      "importance": 1.092937965109526
+      "importance": 4.819409683513248
     },
     {
-      "feature": "error_step",
-      "importance": 1.055881447593955
+      "feature": "channel",
+      "importance": 4.414634428551003
     },
     {
-      "feature": "merchant_average_order_value",
-      "importance": 0.946604697168958
+      "feature": "historical_payment_success_rate",
+      "importance": 3.395390909174144
+    },
+    {
+      "feature": "previous_recovery_success_rate",
+      "importance": 2.2868513044115817
+    },
+    {
+      "feature": "failure_class",
+      "importance": 2.2297498610006805
+    },
+    {
+      "feature": "case_age_hours",
+      "importance": 2.1610624053196092
+    },
+    {
+      "feature": "amount_to_average_order_ratio",
+      "importance": 1.9079478646779777
+    },
+    {
+      "feature": "error_code",
+      "importance": 1.737845874169462
+    },
+    {
+      "feature": "customer_lifetime_value",
+      "importance": 1.4237383291705696
+    },
+    {
+      "feature": "diagnosis_certainty",
+      "importance": 1.3190129639761041
+    },
+    {
+      "feature": "payment_method",
+      "importance": 1.2881000169996157
     },
     {
       "feature": "amount_at_risk",
-      "importance": 0.902726676373294
+      "importance": 1.2158241263055376
+    },
+    {
+      "feature": "failed_payments",
+      "importance": 1.087929087088868
     },
     {
       "feature": "successful_payments",
-      "importance": 0.6977208215813481
+      "importance": 0.8751212866455755
+    },
+    {
+      "feature": "error_reason",
+      "importance": 0.8684448547317569
+    },
+    {
+      "feature": "bank",
+      "importance": 0.5979260390389544
+    },
+    {
+      "feature": "previous_recovery_successes",
+      "importance": 0.5750344091849168
+    },
+    {
+      "feature": "merchant_average_order_value",
+      "importance": 0.5606041412548445
     }
   ]
 }

@@ -12,7 +12,6 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from app.domain.action_scoring import (
-    MerchantScoringProfile,
     RecoveryEconomicsConfig,
     RecoverySourceContext,
     SelectionOutcome,
@@ -20,6 +19,7 @@ from app.domain.action_scoring import (
 from app.domain.actions import RecoveryAction
 from app.domain.customer import Customer
 from app.domain.enums import ActionStatus, PolicyDecision, RecoveryActionType
+from app.domain.merchant import Merchant
 from app.policy import MerchantPolicyEngine
 from app.policy.models import PolicyContext, PolicyEvaluation
 from app.services.action_selector import (
@@ -161,8 +161,8 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
 
 
-def _merchant_profile(merchant: SyntheticMerchant) -> MerchantScoringProfile:
-    return MerchantScoringProfile(
+def _merchant_profile(merchant: SyntheticMerchant) -> Merchant:
+    return Merchant(
         merchant_id=merchant.id,
         archetype=merchant.archetype.value,
         average_order_value=merchant.average_order_value,

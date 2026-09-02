@@ -25,6 +25,10 @@ from simulator.merchants import (
     SyntheticMerchant,
     generate_merchants,
 )
+from simulator.recovery_assumptions import (
+    RecoverySensitivity,
+    RecoverySimulationConfig,
+)
 
 
 __all__ = [
@@ -36,6 +40,8 @@ __all__ = [
     "RecoveryEnvironment",
     "RecoveryOutcomeType",
     "SimulationResult",
+    "RecoverySensitivity",
+    "RecoverySimulationConfig",
     "generate_merchants",
     "generate_customers_for_merchant",
     "generate_synthetic_population",

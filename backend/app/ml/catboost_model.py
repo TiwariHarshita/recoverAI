@@ -8,31 +8,29 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
-from sklearn.metrics import (
-    accuracy_score,
-    average_precision_score,
-    brier_score_loss,
-    confusion_matrix,
-    f1_score,
-    log_loss,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
 
+from app.ml.artifact_contract import (
+    ModelArtifactValidationError,
+    validate_canonical_artifact_metadata,
+)
+from app.ml.calibration import CALIBRATION_METHOD, PlattProbabilityCalibrator
 from app.ml.dataset import (
     CATEGORICAL_FEATURES,
     MODEL_FEATURES,
     TARGET_COLUMN,
+    GroupingStrategy,
+    historical_dataframe_fingerprint,
     prepare_model_features,
     prepare_target,
+    split_audit_metadata,
     split_historical_dataframe,
     validate_historical_dataframe,
 )
+from app.ml.evaluation import evaluate_probabilities
 
 
 MODEL_KIND = "catboost_recovery_model"
-MODEL_FORMAT_VERSION = 2
+MODEL_FORMAT_VERSION = 3
 DEFAULT_THRESHOLD = 0.5
 MISSING_CATEGORY_TOKEN = "__MISSING__"
 
@@ -41,10 +39,15 @@ MISSING_CATEGORY_TOKEN = "__MISSING__"
 class CatBoostTrainingResult:
     model: "CatBoostRecoveryModel"
     metrics: dict[str, float | int]
+    raw_metrics: dict[str, float | int]
+    calibrated_metrics: dict[str, float | int]
     train_rows: int
+    validation_rows: int
     test_rows: int
     train_positive_rate: float
+    validation_positive_rate: float
     test_positive_rate: float
+    split_metadata: dict[str, object]
 
 
 def prepare_catboost_features(
@@ -153,6 +156,8 @@ class CatBoostRecoveryModel:
         self.thread_count = thread_count
 
         self.model = self._build_model()
+        self.calibrator: PlattProbabilityCalibrator | None = None
+        self.training_metadata: dict[str, Any] = {}
         self._is_fitted = False
 
     def _build_model(
@@ -220,7 +225,7 @@ class CatBoostRecoveryModel:
                 "CatBoostRecoveryModel has not been fitted yet."
             )
 
-    def predict_recovery_probability(
+    def predict_raw_recovery_probability(
         self,
         dataframe: pd.DataFrame,
     ) -> np.ndarray:
@@ -242,6 +247,26 @@ class CatBoostRecoveryModel:
             probabilities,
             dtype=float,
         )
+
+    def fit_calibration(self, dataframe: pd.DataFrame) -> None:
+        """Fit Platt calibration using a validation partition only."""
+
+        target = prepare_target(dataframe).to_numpy()
+        probabilities = self.predict_raw_recovery_probability(dataframe)
+        self.calibrator = PlattProbabilityCalibrator().fit(probabilities, target)
+
+    def predict_recovery_probability(
+        self,
+        dataframe: pd.DataFrame,
+    ) -> np.ndarray:
+        """Return canonical calibrated P(recovery | case, action)."""
+
+        if self.calibrator is None:
+            raise ModelArtifactValidationError(
+                "Canonical prediction requires a fitted probability calibrator."
+            )
+        probabilities = self.predict_raw_recovery_probability(dataframe)
+        return self.calibrator.predict(probabilities)
 
     def predict(
         self,
@@ -318,11 +343,6 @@ class CatBoostRecoveryModel:
             exist_ok=True,
         )
 
-        self.model.save_model(
-            str(output_path),
-            format="cbm",
-        )
-
         metadata_path = (
             output_path.with_suffix(
                 ".meta.json"
@@ -389,7 +409,28 @@ class CatBoostRecoveryModel:
             "thread_count": (
                 self.thread_count
             ),
+
+            "calibration": (
+                self.calibrator.to_dict() if self.calibrator is not None else None
+            ),
+
+            "training_metadata": self.training_metadata,
         }
+
+        validate_canonical_artifact_metadata(
+            metadata,
+            expected_model_kind=MODEL_KIND,
+            expected_format_version=MODEL_FORMAT_VERSION,
+            expected_features=tuple(MODEL_FEATURES),
+            expected_target_column=TARGET_COLUMN,
+            expected_categorical_features=tuple(CATEGORICAL_FEATURES),
+            expected_missing_category_token=MISSING_CATEGORY_TOKEN,
+        )
+
+        self.model.save_model(
+            str(output_path),
+            format="cbm",
+        )
 
         with metadata_path.open(
             "w",
@@ -432,129 +473,68 @@ class CatBoostRecoveryModel:
                 f"Model metadata not found: {metadata_path}"
             )
 
-        with metadata_path.open(
-            "r",
-            encoding="utf-8",
-        ) as handle:
-            metadata = json.load(
-                handle
-            )
+        try:
+            with metadata_path.open("r", encoding="utf-8") as handle:
+                metadata = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ModelArtifactValidationError(
+                "Unable to read valid CatBoost artifact metadata."
+            ) from exc
 
-        if (
-            metadata.get(
-                "model_kind"
-            )
-            != MODEL_KIND
-        ):
-            raise ValueError(
-                "Artifact is not a RecoverAI CatBoost recovery model."
-            )
-
-        if (
-            metadata.get(
-                "model_format_version"
-            )
-            != MODEL_FORMAT_VERSION
-        ):
-            raise ValueError(
-                "Unsupported CatBoost model artifact version."
-            )
-
-        if tuple(
-            metadata.get(
-                "model_features",
-                [],
-            )
-        ) != tuple(
-            MODEL_FEATURES
-        ):
-            raise ValueError(
-                "Model artifact feature contract does not match current code."
-            )
-
-        if tuple(
-            metadata.get(
-                "categorical_features",
-                [],
-            )
-        ) != tuple(
-            CATEGORICAL_FEATURES
-        ):
-            raise ValueError(
-                "Model artifact categorical feature contract does not match current code."
-            )
-
-        if (
-            metadata.get(
-                "missing_category_token"
-            )
-            != MISSING_CATEGORY_TOKEN
-        ):
-            raise ValueError(
-                "Model artifact missing-category contract does not match current code."
-            )
-
-        instance = cls(
-            random_state=int(
-                metadata[
-                    "random_state"
-                ]
-            ),
-
-            iterations=int(
-                metadata[
-                    "iterations"
-                ]
-            ),
-
-            depth=int(
-                metadata[
-                    "depth"
-                ]
-            ),
-
-            learning_rate=float(
-                metadata[
-                    "learning_rate"
-                ]
-            ),
-
-            l2_leaf_reg=float(
-                metadata[
-                    "l2_leaf_reg"
-                ]
-            ),
-
-            one_hot_max_size=int(
-                metadata[
-                    "one_hot_max_size"
-                ]
-            ),
-
-            random_strength=float(
-                metadata[
-                    "random_strength"
-                ]
-            ),
-
-            boosting_type=str(
-                metadata[
-                    "boosting_type"
-                ]
-            ),
-
-            thread_count=int(
-                metadata.get(
-                    "thread_count",
-                    1,
-                )
-            ),
+        calibrator, training_metadata = validate_canonical_artifact_metadata(
+            metadata,
+            expected_model_kind=MODEL_KIND,
+            expected_format_version=MODEL_FORMAT_VERSION,
+            expected_features=tuple(MODEL_FEATURES),
+            expected_target_column=TARGET_COLUMN,
+            expected_categorical_features=tuple(CATEGORICAL_FEATURES),
+            expected_missing_category_token=MISSING_CATEGORY_TOKEN,
         )
 
-        instance.model.load_model(
-            str(input_path),
-            format="cbm",
+        required_model_fields = (
+            "random_state",
+            "iterations",
+            "depth",
+            "learning_rate",
+            "l2_leaf_reg",
+            "one_hot_max_size",
+            "random_strength",
+            "boosting_type",
+            "thread_count",
         )
+        missing_model_fields = [key for key in required_model_fields if key not in metadata]
+        if missing_model_fields:
+            raise ModelArtifactValidationError(
+                "Missing CatBoost model metadata: "
+                f"{', '.join(missing_model_fields)}."
+            )
+
+        try:
+            instance = cls(
+                random_state=int(metadata["random_state"]),
+                iterations=int(metadata["iterations"]),
+                depth=int(metadata["depth"]),
+                learning_rate=float(metadata["learning_rate"]),
+                l2_leaf_reg=float(metadata["l2_leaf_reg"]),
+                one_hot_max_size=int(metadata["one_hot_max_size"]),
+                random_strength=float(metadata["random_strength"]),
+                boosting_type=str(metadata["boosting_type"]),
+                thread_count=int(metadata["thread_count"]),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ModelArtifactValidationError(
+                "Malformed CatBoost model metadata."
+            ) from exc
+
+        try:
+            instance.model.load_model(str(input_path), format="cbm")
+        except Exception as exc:
+            raise ModelArtifactValidationError(
+                "CatBoost model binary is invalid or inconsistent with its metadata."
+            ) from exc
+
+        instance.calibrator = calibrator
+        instance.training_metadata = training_metadata
 
         instance._is_fitted = True
 
@@ -567,133 +547,18 @@ def _evaluate_probabilities(
     *,
     threshold: float,
 ) -> dict[str, float | int]:
-    predictions = (
-        probabilities >= threshold
-    ).astype(int)
-
-    (
-        tn,
-        fp,
-        fn,
-        tp,
-    ) = confusion_matrix(
-        y_true,
-        predictions,
-        labels=[
-            0,
-            1,
-        ],
-    ).ravel()
-
-    majority_accuracy = max(
-        float(
-            (
-                y_true == 0
-            ).mean()
-        ),
-        float(
-            (
-                y_true == 1
-            ).mean()
-        ),
-    )
-
-    return {
-        "threshold": float(
-            threshold
-        ),
-
-        "accuracy": float(
-            accuracy_score(
-                y_true,
-                predictions,
-            )
-        ),
-
-        "precision": float(
-            precision_score(
-                y_true,
-                predictions,
-                zero_division=0,
-            )
-        ),
-
-        "recall": float(
-            recall_score(
-                y_true,
-                predictions,
-                zero_division=0,
-            )
-        ),
-
-        "f1": float(
-            f1_score(
-                y_true,
-                predictions,
-                zero_division=0,
-            )
-        ),
-
-        "roc_auc": float(
-            roc_auc_score(
-                y_true,
-                probabilities,
-            )
-        ),
-
-        "average_precision": float(
-            average_precision_score(
-                y_true,
-                probabilities,
-            )
-        ),
-
-        "log_loss": float(
-            log_loss(
-                y_true,
-                probabilities,
-                labels=[
-                    0,
-                    1,
-                ],
-            )
-        ),
-
-        "brier_score": float(
-            brier_score_loss(
-                y_true,
-                probabilities,
-            )
-        ),
-
-        "majority_class_accuracy": (
-            majority_accuracy
-        ),
-
-        "true_negative": int(
-            tn
-        ),
-
-        "false_positive": int(
-            fp
-        ),
-
-        "false_negative": int(
-            fn
-        ),
-
-        "true_positive": int(
-            tp
-        ),
-    }
+    return evaluate_probabilities(y_true, probabilities, threshold=threshold)
 
 
 def train_catboost_model(
     dataframe: pd.DataFrame,
     *,
-    test_size: float = 0.20,
+    validation_size: float = 0.15,
+    test_size: float = 0.15,
     random_state: int = 42,
     threshold: float = DEFAULT_THRESHOLD,
+    grouping_strategy: GroupingStrategy | str = GroupingStrategy.CUSTOMER,
+    data_generation_reference: str = "in-memory historical dataframe",
     iterations: int = 890,
     depth: int = 2,
     learning_rate: float = 0.03,
@@ -734,13 +599,17 @@ def train_catboost_model(
 
     split = split_historical_dataframe(
         dataframe,
+        validation_size=validation_size,
         test_size=test_size,
         random_state=random_state,
+        grouping_strategy=grouping_strategy,
     )
 
     train_frame = (
         split.train
     )
+
+    validation_frame = split.validation
 
     test_frame = (
         split.test
@@ -762,30 +631,49 @@ def train_catboost_model(
         train_frame
     )
 
+    # Fit calibration on validation data after the raw model is frozen. The
+    # final test partition is first accessed only after this point.
+    model.fit_calibration(validation_frame)
+
     test_target = prepare_target(
         test_frame
     )
 
-    probabilities = (
-        model.predict_recovery_probability(
-            test_frame
-        )
-    )
+    raw_probabilities = model.predict_raw_recovery_probability(test_frame)
+    calibrated_probabilities = model.predict_recovery_probability(test_frame)
 
-    metrics = _evaluate_probabilities(
+    raw_metrics = _evaluate_probabilities(
         test_target,
-        probabilities,
+        raw_probabilities,
         threshold=threshold,
     )
+    calibrated_metrics = _evaluate_probabilities(
+        test_target,
+        calibrated_probabilities,
+        threshold=threshold,
+    )
+    audit_metadata = split_audit_metadata(split)
+    model.training_metadata = {
+        "data_generation_reference": data_generation_reference,
+        "data_fingerprint_sha256": historical_dataframe_fingerprint(dataframe),
+        "feature_contract": list(MODEL_FEATURES),
+        **audit_metadata,
+        "calibration_method": CALIBRATION_METHOD,
+        "raw_test_metrics": raw_metrics,
+        "calibrated_test_metrics": calibrated_metrics,
+    }
 
     return CatBoostTrainingResult(
         model=model,
-
-        metrics=metrics,
+        metrics=calibrated_metrics,
+        raw_metrics=raw_metrics,
+        calibrated_metrics=calibrated_metrics,
 
         train_rows=len(
             train_frame
         ),
+
+        validation_rows=len(validation_frame),
 
         test_rows=len(
             test_frame
@@ -797,7 +685,11 @@ def train_catboost_model(
             ).mean()
         ),
 
+        validation_positive_rate=float(prepare_target(validation_frame).mean()),
+
         test_positive_rate=float(
             test_target.mean()
         ),
+
+        split_metadata=audit_metadata,
     )

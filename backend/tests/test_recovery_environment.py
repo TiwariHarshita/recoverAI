@@ -4,12 +4,16 @@ from datetime import (
     timezone,
 )
 from decimal import Decimal
+from math import isclose
 
 import pytest
 
 from app.domain.actions import (
     RecoveryAction,
 )
+from app.domain.merchant import Merchant
+from app.domain.payment_attempt import PaymentAttempt
+from app.domain.recovery_case import RecoveryCase
 from app.domain.enums import (
     ActionStatus,
     CaseType,
@@ -33,9 +37,12 @@ from app.services.diagnosis import (
 from simulator import (
     RecoveryEnvironment,
     RecoveryOutcomeType,
+    RecoverySensitivity,
+    RecoverySimulationConfig,
     generate_case_for_customer,
     generate_synthetic_population,
 )
+from simulator.recovery_assumptions import BASE_RECOVERY_PROBABILITIES
 
 
 REFERENCE_TIME = datetime(
@@ -406,6 +413,167 @@ def test_probabilities_are_bounded(
             checked += 1
 
     assert checked > 0
+
+
+def test_probability_is_composed_on_log_odds_scale(
+    merchant_customer,
+    scenario,
+):
+    merchant, customer = merchant_customer
+    contextual_customer = customer.model_copy(
+        update={
+            "historical_payment_success_rate": 0.95,
+            "previous_recovery_attempts": 0,
+            "previous_recovery_successes": 0,
+        }
+    )
+    neutral_case = scenario.case.model_copy(
+        update={
+            "amount_at_risk": merchant.average_order_value,
+            "payment_method": None,
+            "created_at": REFERENCE_TIME,
+        }
+    )
+    neutral_scenario = scenario.model_copy(
+        update={"case": neutral_case, "payment": None}
+    )
+    action = make_action(neutral_scenario, RecoveryActionType.WAIT)
+    environment = RecoveryEnvironment()
+    base = BASE_RECOVERY_PROBABILITIES[
+        neutral_scenario.expected_failure_class
+    ][RecoveryActionType.WAIT]
+
+    actual = environment.recovery_probability(
+        neutral_scenario,
+        merchant,
+        contextual_customer,
+        action,
+        now=REFERENCE_TIME,
+    )
+
+    customer_log_odds_effect = 0.20 * (0.95 - 0.75)
+    expected = environment._sigmoid(
+        environment._logit(base) + customer_log_odds_effect
+    )
+
+    assert isclose(actual, expected)
+    assert not isclose(actual, base + customer_log_odds_effect)
+
+
+def test_default_and_explicit_neutral_scenarios_match(
+    merchant_customer,
+    scenario,
+):
+    merchant, customer = merchant_customer
+    action = make_action(
+        scenario,
+        RecoveryActionType.CREATE_PAYMENT_LINK,
+        CommunicationChannel.SMS,
+    )
+    default = RecoveryEnvironment(seed=17)
+    neutral = RecoveryEnvironment(
+        seed=17,
+        configuration=RecoverySimulationConfig(
+            sensitivity=RecoverySensitivity.NEUTRAL
+        ),
+    )
+
+    assert default.configuration == neutral.configuration
+    assert default.recovery_probability(
+        scenario, merchant, customer, action, now=REFERENCE_TIME
+    ) == neutral.recovery_probability(
+        scenario, merchant, customer, action, now=REFERENCE_TIME
+    )
+
+
+def test_sensitivity_scenarios_order_recovery_conditions(
+    merchant_customer,
+    scenario,
+):
+    merchant, customer = merchant_customer
+    action = make_action(
+        scenario,
+        RecoveryActionType.CREATE_PAYMENT_LINK,
+        CommunicationChannel.SMS,
+    )
+
+    probabilities = {
+        sensitivity: RecoveryEnvironment(
+            configuration=RecoverySimulationConfig(sensitivity=sensitivity)
+        ).recovery_probability(
+            scenario, merchant, customer, action, now=REFERENCE_TIME
+        )
+        for sensitivity in RecoverySensitivity
+    }
+
+    assert (
+        probabilities[RecoverySensitivity.CONSERVATIVE]
+        < probabilities[RecoverySensitivity.NEUTRAL]
+        < probabilities[RecoverySensitivity.OPTIMISTIC]
+    )
+
+
+def test_log_odds_helpers_handle_probability_edges_safely():
+    environment = RecoveryEnvironment()
+
+    values = [
+        environment._sigmoid(environment._logit(probability) + shift)
+        for probability in (0.0, 1e-15, 1.0 - 1e-15, 1.0)
+        for shift in (-1000.0, 0.0, 1000.0)
+    ]
+
+    assert all(0.0 <= value <= 1.0 for value in values)
+    assert environment._sigmoid(-1000.0) == 0.0
+    assert environment._sigmoid(1000.0) == 1.0
+
+
+def test_sensitivity_configuration_and_seeded_outcome_are_serializable_and_reproducible(
+    merchant_customer,
+    scenario,
+):
+    merchant, customer = merchant_customer
+    action = make_action(
+        scenario,
+        RecoveryActionType.CREATE_PAYMENT_LINK,
+        CommunicationChannel.SMS,
+    )
+    configuration = RecoverySimulationConfig(
+        sensitivity=RecoverySensitivity.CONSERVATIVE
+    )
+
+    first = RecoveryEnvironment(
+        seed=909,
+        configuration=configuration,
+    ).simulate_action(
+        scenario, merchant, customer, action, now=REFERENCE_TIME, rollout_index=4
+    )
+    second = RecoveryEnvironment(
+        seed=909,
+        configuration=RecoverySimulationConfig.model_validate_json(
+            configuration.model_dump_json()
+        ),
+    ).simulate_action(
+        scenario, merchant, customer, action, now=REFERENCE_TIME, rollout_index=4
+    )
+
+    assert configuration.model_dump(mode="json") == {
+        "sensitivity": "conservative"
+    }
+    assert first == second
+    assert first.sensitivity == "conservative"
+
+
+def test_simulator_hidden_probability_state_does_not_leak_into_domain_models():
+    forbidden = {
+        "sensitivity",
+        "latent_recovery_probability",
+        "random_draw",
+        "log_odds_shift",
+    }
+
+    assert forbidden.isdisjoint(Merchant.model_fields)
+    assert forbidden.isdisjoint(PaymentAttempt.model_fields)
+    assert forbidden.isdisjoint(RecoveryCase.model_fields)
 
 
 # ============================================================

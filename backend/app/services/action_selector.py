@@ -16,7 +16,6 @@ from app.domain.action_scoring import (
     ActionScore,
     ActionSelectionResult,
     ExcludedAction,
-    MerchantScoringProfile,
     RecoveryEconomicsConfig,
     RecoverySourceContext,
     SelectionOutcome,
@@ -29,6 +28,7 @@ from app.domain.enums import (
     PolicyDecision,
     RecoveryActionType,
 )
+from app.domain.merchant import Merchant
 from app.domain.policies import MerchantPolicy
 from app.domain.recovery_case import RecoveryCase
 from app.ml.inference_features import (
@@ -446,7 +446,7 @@ def _validate_relationships(
     *,
     recovery_case: RecoveryCase,
     customer: Customer,
-    merchant: MerchantScoringProfile,
+    merchant: Merchant,
     policy: MerchantPolicy,
     context: PolicyContext,
 ) -> None:
@@ -978,7 +978,7 @@ def select_best_recovery_action(
     candidate_actions: list[
         RecoveryAction
     ],
-    merchant: MerchantScoringProfile,
+    merchant: Merchant,
     merchant_policy: MerchantPolicy,
     policy_context: PolicyContext,
     source_context: RecoverySourceContext,

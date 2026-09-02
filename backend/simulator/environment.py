@@ -10,7 +10,7 @@ from decimal import (
 )
 from enum import Enum
 from hashlib import sha256
-from math import log2
+from math import exp, log, log2
 
 from pydantic import BaseModel, Field
 
@@ -33,10 +33,12 @@ from simulator.merchants import (
 )
 from simulator.recovery_assumptions import (
     ACTION_RECOVERY_DELAY_HOURS,
-    BANK_RECOVERY_OFFSETS,
+    BANK_RECOVERY_LOG_ODDS_EFFECTS,
     BASE_RECOVERY_PROBABILITIES,
     DEFAULT_ACTION_PROBABILITIES,
-    PAYMENT_METHOD_RECOVERY_OFFSETS,
+    PAYMENT_METHOD_RECOVERY_LOG_ODDS_EFFECTS,
+    RecoverySensitivity,
+    RecoverySimulationConfig,
 )
 
 
@@ -102,6 +104,8 @@ class SimulationResult(BaseModel):
         le=1,
     )
 
+    sensitivity: RecoverySensitivity
+
     case_after: RecoveryCase
 
     action_after: RecoveryAction
@@ -148,8 +152,10 @@ class RecoveryEnvironment:
         self,
         *,
         seed: int = 42,
+        configuration: RecoverySimulationConfig | None = None,
     ) -> None:
         self.seed = seed
+        self.configuration = configuration or RecoverySimulationConfig()
 
     # ========================================================
     # PUBLIC: LATENT PROBABILITY
@@ -210,9 +216,10 @@ class RecoveryEnvironment:
         ):
             return 0.0
 
-        probability = (
-            base_probability
-        )
+        log_odds = self._logit(base_probability)
+
+        # The named sensitivity regime is a documented global odds shift.
+        log_odds += self.configuration.log_odds_shift
 
         # ----------------------------------------------------
         # Customer's historical payment reliability
@@ -223,7 +230,7 @@ class RecoveryEnvironment:
             - 0.75
         )
 
-        probability += (
+        log_odds += (
             0.20
             * payment_success_signal
         )
@@ -241,7 +248,7 @@ class RecoveryEnvironment:
                 / customer.previous_recovery_attempts
             )
 
-            probability += (
+            log_odds += (
                 0.12
                 * (
                     recovery_history_rate
@@ -261,7 +268,7 @@ class RecoveryEnvironment:
                 customer.preferred_channel
                 == action.channel
             ):
-                probability += 0.04
+                log_odds += 0.04
 
             elif (
                 customer.preferred_channel
@@ -269,7 +276,7 @@ class RecoveryEnvironment:
                 and customer.preferred_channel
                 != CommunicationChannel.NONE
             ):
-                probability -= 0.02
+                log_odds -= 0.02
 
         # ----------------------------------------------------
         # Preferred payment method
@@ -287,7 +294,7 @@ class RecoveryEnvironment:
                 scenario.case.payment_method
                 == customer.preferred_payment_method
             ):
-                probability += 0.02
+                log_odds += 0.02
 
         # ----------------------------------------------------
         # Payment method synthetic effect
@@ -297,8 +304,8 @@ class RecoveryEnvironment:
             scenario.case.payment_method
             is not None
         ):
-            probability += (
-                PAYMENT_METHOD_RECOVERY_OFFSETS.get(
+            log_odds += (
+                PAYMENT_METHOD_RECOVERY_LOG_ODDS_EFFECTS.get(
                     scenario.case.payment_method,
                     0.0,
                 )
@@ -312,8 +319,8 @@ class RecoveryEnvironment:
             scenario.payment is not None
             and scenario.payment.bank is not None
         ):
-            probability += (
-                BANK_RECOVERY_OFFSETS.get(
+            log_odds += (
+                BANK_RECOVERY_LOG_ODDS_EFFECTS.get(
                     scenario.payment.bank,
                     0.0,
                 )
@@ -323,8 +330,8 @@ class RecoveryEnvironment:
         # Amount pressure
         # ----------------------------------------------------
 
-        probability += (
-            self._amount_adjustment(
+        log_odds += (
+            self._amount_log_odds_effect(
                 scenario=scenario,
                 merchant=merchant,
                 action=action,
@@ -335,16 +342,14 @@ class RecoveryEnvironment:
         # Case age
         # ----------------------------------------------------
 
-        probability += (
-            self._age_adjustment(
+        log_odds += (
+            self._age_log_odds_effect(
                 scenario=scenario,
                 now=now,
             )
         )
 
-        return self._clamp_probability(
-            probability
-        )
+        return self._sigmoid(log_odds)
 
     # ========================================================
     # PUBLIC: SIMULATE ACTION
@@ -432,14 +437,13 @@ class RecoveryEnvironment:
     # ========================================================
 
     @staticmethod
-    def _amount_adjustment(
+    def _amount_log_odds_effect(
         scenario: SyntheticRecoveryScenario,
         merchant: SyntheticMerchant,
         action: RecoveryAction,
     ) -> float:
         """
-        Higher-than-normal transaction amounts are generally harder
-        to recover in our synthetic environment.
+        Synthetic log-odds effect for amount relative to merchant average.
 
         Partial payment and human escalation are less sensitive to
         amount because they exist partly to handle difficult/high-value
@@ -502,7 +506,7 @@ class RecoveryEnvironment:
     # ========================================================
 
     @staticmethod
-    def _age_adjustment(
+    def _age_log_odds_effect(
         scenario: SyntheticRecoveryScenario,
         now: datetime,
     ) -> float:
@@ -695,6 +699,8 @@ class RecoveryEnvironment:
 
             random_draw=draw,
 
+            sensitivity=self.configuration.sensitivity,
+
             case_after=case_after,
 
             action_after=action_after,
@@ -821,6 +827,8 @@ class RecoveryEnvironment:
 
             random_draw=draw,
 
+            sensitivity=self.configuration.sensitivity,
+
             case_after=case_after,
 
             action_after=action_after,
@@ -911,6 +919,8 @@ class RecoveryEnvironment:
             ),
 
             random_draw=draw,
+
+            sensitivity=self.configuration.sensitivity,
 
             case_after=case_after,
 
@@ -1313,18 +1323,26 @@ class RecoveryEnvironment:
             )
 
     # ========================================================
-    # PROBABILITY CLAMP
+    # NUMERICALLY STABLE LOG-ODDS HELPERS
     # ========================================================
 
     @staticmethod
-    def _clamp_probability(
+    def _logit(
         probability: float,
     ) -> float:
+        if not 0.0 <= probability <= 1.0:
+            raise ValueError("Base recovery probability must be in [0, 1].")
 
-        return max(
-            0.01,
-            min(
-                0.97,
-                probability,
-            ),
-        )
+        # Finite bounds make exact/near-exact edge assumptions safe while
+        # retaining their intended ordering under additional log-odds effects.
+        epsilon = 1e-12
+        bounded = min(1.0 - epsilon, max(epsilon, probability))
+        return log(bounded / (1.0 - bounded))
+
+    @staticmethod
+    def _sigmoid(log_odds: float) -> float:
+        if log_odds >= 0.0:
+            return 1.0 / (1.0 + exp(-log_odds))
+
+        exponent = exp(log_odds)
+        return exponent / (1.0 + exponent)

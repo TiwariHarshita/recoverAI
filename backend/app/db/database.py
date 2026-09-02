@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
 from functools import lru_cache
 from typing import Iterator
@@ -8,8 +7,8 @@ from typing import Iterator
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from app.config import ApplicationSettings, DEFAULT_DATABASE_URL
 
-DEFAULT_DATABASE_URL = "postgresql+psycopg://recoverai:recoverai@localhost:5432/recoverai"
 
 
 class Base(DeclarativeBase):
@@ -17,7 +16,7 @@ class Base(DeclarativeBase):
 
 
 def get_database_url() -> str:
-    return os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+    return ApplicationSettings.from_env().database_url
 
 
 def build_engine(database_url: str | None = None, *, echo: bool = False) -> Engine:
